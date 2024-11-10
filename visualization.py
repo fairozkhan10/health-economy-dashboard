@@ -1,49 +1,37 @@
 # visualization.py
 # Author: Fairoz Khan
-# Description: Module for creating visualizations of health and economic data
-
+# Description: Module for creating visualizations using Plotly and Matplotlib
 
 import matplotlib.pyplot as plt
 import plotly.express as px
+import streamlit as st
 
+def plot_health_data(df, indicator, country_code):
+    """Plot health data over time for a specific country using Plotly."""
+    # Filter data for the specified country
+    country_df = df[df['country_code'] == country_code]
 
-def plot_health_data(df, indicator = 'new_cases'):
-    """Plot health data over time using Plotly."""
-    fig = px.line(df, x = 'Year', y = indicator, title = 'Health Data Over Time')
-    fig.show()
+    # Check if the indicator exists
+    if indicator not in country_df.columns:
+        st.write(f"Indicator '{indicator}' not found in the data.")
+        return
 
+    # Plot using Plotly
+    fig = px.line(country_df, x='Year', y=indicator,
+                  title=f'Health Data Over Time for {country_code}: {indicator}')
+    st.plotly_chart(fig)
 
-def plot_economic_data(df, indicator = 'value'):
+def plot_economic_data(df, indicator):
     """Plot economic data over time using Matplotlib."""
-    plt.figure(figsize=(10, 5))
-    plt.plot(df.index, df[indicator], label=indicator)
+    # Check if the indicator exists
+    if indicator not in df.columns:
+        st.write(f"Indicator '{indicator}' not found in the data.")
+        return
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(df['Year'], df[indicator], label=indicator)
     plt.xlabel('Year')
     plt.ylabel(indicator)
     plt.title(f'{indicator} Over Time')
     plt.legend()
-    plt.grid()
-    plt.show()
-
-
-
-
-# Test Block
-if __name__ == "__main__":
-    import pandas as pd
-
-    # Sample health data for testing
-    health_data = pd.DataFrame({
-        'Year': [2020, 2021, 2022],
-        'new_cases': [1000, 5000, 3000]
-    })
-    print("Testing Health Data Plot...")
-    plot_health_data(health_data, 'new_cases')
-
-    # Sample economic data for testing
-    economic_data = pd.DataFrame({
-        'Year': [2020, 2021, 2022],
-        'value': [2.5, 3.0, 3.5]
-    }).set_index('Year')
-    print("Testing Economic Data Plot...")
-    plot_economic_data(economic_data, 'value')
-
+    st.pyplot(plt)
