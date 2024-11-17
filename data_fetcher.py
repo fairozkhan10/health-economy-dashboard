@@ -5,6 +5,7 @@
 import os
 import requests
 import pandas as pd
+import logging
 import streamlit as st  # Import Streamlit to access secrets
 
 
@@ -17,8 +18,10 @@ def fetch_health_data():
         data = response.json()
         df = pd.DataFrame.from_dict(data, orient='index').reset_index()
         df.rename(columns={"index": "country_code"}, inplace=True)
+        logger.info("Successfully fetched health data.")
         return df
     except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching health data: {e}")
         st.error(f"Error fetching health data: {e}")
         return None
 
@@ -31,6 +34,7 @@ def fetch_economic_data(series_ids=["CPIAUCSL"]):
     api_key = st.secrets["FRED_API_KEY"] if "FRED_API_KEY" in st.secrets else os.getenv("FRED_API_KEY")
 
     if not api_key:
+        logger.error("FRED_API_KEY not set in Streamlit secrets or environment variables.")
         st.error("Error: FRED_API_KEY not set in Streamlit secrets or environment variables.")
         return None
 
@@ -50,34 +54,50 @@ def fetch_economic_data(series_ids=["CPIAUCSL"]):
                 df = pd.json_normalize(observations)
                 df["series_id"] = series_id
                 all_series_data.append(df)
+                logger.info(f"Successfully fetched economic data for series_id {series_id}.")
             else:
+                logger.warning(f"No observations found for series_id {series_id}.")
                 st.warning(f"No observations found for series_id {series_id}.")
         except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching economic data for series_id {series_id}: {e}")
             st.error(f"Error fetching economic data for series_id {series_id}: {e}")
 
     if all_series_data:
-        return pd.concat(all_series_data, ignore_index=True)
+        combined_df = pd.concat(all_series_data, ignore_index=True)
+        logger.info("Successfully combined all economic data.")
+        return combined_df
     else:
+        logger.error("No economic data fetched.")
         st.error("No economic data fetched.")
         return None
 
 
+# Configure Logging
+logging.basicConfig(
+    level=logging.INFO,  # Change to DEBUG for more verbosity
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # Test Block
 if __name__ == "__main__":
     # Testing Health Data Fetching
-    print("Testing Health Data Fetching...")
+    logger.info("Testing Health Data Fetching...")
     health_data = fetch_health_data()
     if health_data is not None:
-        print("Health Data Retrieved:")
-        print(health_data.head())
+        logger.info("Health Data Retrieved:")
+        logger.info(health_data.head())
     else:
-        print("Failed to retrieve health data.")
+        logger.error("Failed to retrieve health data.")
 
     # Testing Economic Data Fetching
-    print("\nTesting Economic Data Fetching...")
+    logger.info("\nTesting Economic Data Fetching...")
     economic_data = fetch_economic_data(series_ids=["CPIAUCSL", "GDP"])
     if economic_data is not None:
-        print("Economic Data Retrieved:")
-        print(economic_data.head())
+        logger.info("Economic Data Retrieved:")
+        logger.info(economic_data.head())
     else:
-        print("Failed to retrieve economic data.")
+        logger.error("Failed to retrieve economic data.")

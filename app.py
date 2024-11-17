@@ -4,9 +4,20 @@
 
 import streamlit as st
 import pandas as pd  # Import pandas as pd
+import logging  # Import logging
 from data_fetcher import fetch_health_data, fetch_economic_data
 from data_processing import clean_data, transform_health_data, transform_economic_data, normalize_data, calculate_correlation
 from visualization import plot_comparison_with_annotations, plot_cross_country_heatmap
+
+# Configure Logging
+logging.basicConfig(
+    level=logging.INFO,  # Change to DEBUG for more verbosity
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Set Streamlit page configuration
 st.set_page_config(page_title="Health and Economy Dashboard", layout="wide")
@@ -68,7 +79,7 @@ with st.sidebar.expander("Select Year Range"):
 
 # Caching the data fetching and processing functions
 @st.cache_data
-def get_health_data():
+def get_health_data(health_indicator):
     health_data_raw = fetch_health_data()
     if health_data_raw is not None:
         cleaned_health = clean_data(health_data_raw)
@@ -79,8 +90,8 @@ def get_health_data():
     return None
 
 @st.cache_data
-def get_economic_data(series_ids):
-    economic_data_raw = fetch_economic_data(series_ids=series_ids)
+def get_economic_data(economic_indicator):
+    economic_data_raw = fetch_economic_data(series_ids=[economic_indicator])
     if economic_data_raw is not None:
         cleaned_economic = clean_data(economic_data_raw)
         if not cleaned_economic.empty:
@@ -91,13 +102,13 @@ def get_economic_data(series_ids):
 
 # Fetch and Process Health Data
 with st.spinner("Fetching and processing health data..."):
-    health_data_normalized = get_health_data()
+    health_data_normalized = get_health_data(health_indicator=health_indicator)
     if health_data_normalized is None:
         st.error("Failed to process health data.")
 
 # Fetch and Process Economic Data
 with st.spinner("Fetching and processing economic data..."):
-    economic_data_normalized = get_economic_data(series_ids=[economic_indicator])
+    economic_data_normalized = get_economic_data(economic_indicator=economic_indicator)
     if economic_data_normalized is None:
         st.error("Failed to process economic data.")
 
@@ -107,6 +118,7 @@ if health_data_normalized is not None:
         (health_data_normalized['Year'] >= year_range[0]) &
         (health_data_normalized['Year'] <= year_range[1])
     ]
+    logger.debug(f"Health data filtered for years {year_range[0]} to {year_range[1]}.")
 else:
     health_filtered = None
 
@@ -115,6 +127,7 @@ if economic_data_normalized is not None:
         (economic_data_normalized['Year'] >= year_range[0]) &
         (economic_data_normalized['Year'] <= year_range[1])
     ]
+    logger.debug(f"Economic data filtered for years {year_range[0]} to {year_range[1]}.")
 else:
     economic_filtered = None
 
@@ -171,13 +184,13 @@ with col2:
 
         # Download Options
         st.subheader("💾 Download Data")
-        if st.button("Download Health Data"):
-            csv = health_data_normalized.to_csv(index=False)
-            st.download_button(label="Download CSV", data=csv, file_name='health_data.csv', mime='text/csv')
+        with st.expander("Download Health Data"):
+            csv_health = health_data_normalized.to_csv(index=False)
+            st.download_button(label="Download Health Data as CSV", data=csv_health, file_name='health_data.csv', mime='text/csv')
 
-        if st.button("Download Economic Data"):
-            csv = economic_data_normalized.to_csv(index=False)
-            st.download_button(label="Download CSV", data=csv, file_name='economic_data.csv', mime='text/csv')
+        with st.expander("Download Economic Data"):
+            csv_economic = economic_data_normalized.to_csv(index=False)
+            st.download_button(label="Download Economic Data as CSV", data=csv_economic, file_name='economic_data.csv', mime='text/csv')
     else:
         st.write("Data is insufficient to display additional insights.")
 
