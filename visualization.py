@@ -1,37 +1,125 @@
 # visualization.py
 # Author: Fairoz Khan
-# Description: Module for creating visualizations using Plotly and Matplotlib
+# Description: Module for creating advanced visualizations using Plotly
 
-import matplotlib.pyplot as plt
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
-def plot_health_data(df, indicator, country_code):
-    """Plot health data over time for a specific country using Plotly."""
-    # Filter data for the specified country
-    country_df = df[df['country_code'] == country_code]
 
-    # Check if the indicator exists
-    if indicator not in country_df.columns:
-        st.write(f"Indicator '{indicator}' not found in the data.")
-        return
+def plot_comparison_with_annotations(health_df, economic_df, health_indicator, economic_indicator, country_codes):
+    """Plot comparison with annotations for key events for multiple countries."""
+    try:
+        fig = go.Figure()
 
-    # Plot using Plotly
-    fig = px.line(country_df, x='Year', y=indicator,
-                  title=f'Health Data Over Time for {country_code}: {indicator}')
-    st.plotly_chart(fig)
+        # Define colors for different countries
+        colors = px.colors.qualitative.Plotly
+        color_map = {country: colors[i % len(colors)] for i, country in enumerate(country_codes)}
 
-def plot_economic_data(df, indicator):
-    """Plot economic data over time using Matplotlib."""
-    # Check if the indicator exists
-    if indicator not in df.columns:
-        st.write(f"Indicator '{indicator}' not found in the data.")
-        return
+        for country in country_codes:
+            # Filter health data for the specified country
+            health_country_df = health_df[health_df['country_code'] == country]
+            economic_country_df = economic_df[economic_df['series_id'] == economic_indicator]
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(df['Year'], df[indicator], label=indicator)
-    plt.xlabel('Year')
-    plt.ylabel(indicator)
-    plt.title(f'{indicator} Over Time')
-    plt.legend()
-    st.pyplot(plt)
+            if health_country_df.empty:
+                st.warning(f"No health data found for country code '{country}'. Skipping.")
+                continue
+            if economic_country_df.empty:
+                st.warning(f"No economic data found for series_id '{economic_indicator}' for country '{country}'. Skipping.")
+                continue
+
+            # Add health data trace
+            fig.add_trace(go.Scatter(
+                x=health_country_df['Year'],
+                y=health_country_df[health_indicator],
+                name=f"{health_indicator} ({country})",
+                line=dict(color=color_map[country], dash='solid')
+            ))
+
+            # Add economic data trace
+            fig.add_trace(go.Scatter(
+                x=economic_country_df['Year'],
+                y=economic_country_df['value'],
+                name=f"{economic_indicator} ({country})",
+                line=dict(color=color_map[country], dash='dash'),
+                yaxis="y2"
+            ))
+
+            # Add annotations (e.g., peak values) for each country
+            if not health_country_df[health_indicator].empty:
+                max_health = health_country_df[health_indicator].max()
+                max_health_year = health_country_df.loc[health_country_df[health_indicator].idxmax(), 'Year']
+                fig.add_annotation(
+                    x=max_health_year,
+                    y=max_health,
+                    text=f"Peak Health ({country}): {max_health:.2f}",
+                    showarrow=True,
+                    arrowhead=2,
+                    ax=0,
+                    ay=-40,
+                    font=dict(color=color_map[country])
+                )
+
+            if not economic_country_df['value'].empty:
+                max_econ = economic_country_df['value'].max()
+                max_econ_year = economic_country_df.loc[economic_country_df['value'].idxmax(), 'Year']
+                fig.add_annotation(
+                    x=max_econ_year,
+                    y=max_econ,
+                    text=f"Peak Economic ({country}): {max_econ:.2f}",
+                    showarrow=True,
+                    arrowhead=2,
+                    ax=0,
+                    ay=40,
+                    font=dict(color=color_map[country])
+                )
+
+        # Update layout for dual y-axes
+        fig.update_layout(
+            title=f"Comparison of {health_indicator} and {economic_indicator}",
+            xaxis=dict(title="Year"),
+            yaxis=dict(
+                title=f"{health_indicator} (Health)",
+                titlefont=dict(color="blue"),
+                tickfont=dict(color="blue")
+            ),
+            yaxis2=dict(
+                title=f"{economic_indicator} (Economic)",
+                titlefont=dict(color="green"),
+                tickfont=dict(color="green"),
+                overlaying="y",
+                side="right"
+            ),
+            legend=dict(x=0.5, y=-0.2, orientation="h"),
+            margin=dict(l=50, r=50, t=100, b=100)
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"Error generating comparison chart: {e}")
+
+
+def plot_cross_country_heatmap(health_df, health_indicator):
+    """Plot heatmap to compare health indicators across countries."""
+    try:
+        if health_indicator not in health_df.columns:
+            st.error(f"Health indicator '{health_indicator}' not found in the data.")
+            return
+
+        # Pivot the DataFrame to have countries on one axis and years on the other
+        pivot_df = health_df.pivot(index='country_code', columns='Year', values=health_indicator)
+
+        fig = px.imshow(
+            pivot_df,
+            labels=dict(x="Year", y="Country Code", color=health_indicator),
+            x=pivot_df.columns,
+            y=pivot_df.index,
+            color_continuous_scale="Viridis",
+            title=f"Heatmap of {health_indicator} Across Countries and Years"
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"Error generating heatmap: {e}")
