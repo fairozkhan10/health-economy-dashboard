@@ -4,93 +4,70 @@
 
 import pandas as pd
 import logging
-import streamlit as st  # Needed for the clean_data function to print warnings
+import streamlit as st
 
-
-def clean_data(df):
-    """Clean data by removing duplicates and dropping irrelevant columns, excluding 'data'."""
+def clean_data_health(df):
+    """Clean health data by removing duplicates and handling missing values."""
     try:
-        # Remove duplicate columns
-        df = df.loc[:, ~df.columns.duplicated()]
-        logger.debug("Removed duplicate columns.")
+        logger.info("Starting cleaning of health data.")
+        # Remove duplicate rows
+        initial_shape = df.shape
+        df = df.drop_duplicates()
+        logger.debug(f"Removed {initial_shape[0] - df.shape[0]} duplicate rows.")
 
-        # Remove rows that are completely empty
+        # Drop rows with all NaNs
         df = df.dropna(how='all')
         logger.debug("Dropped completely empty rows.")
 
-        # Ensure 'data' column exists and contains lists; replace NaN or non-list with empty lists
-        if 'data' in df.columns:
-            df['data'] = df['data'].apply(lambda x: x if isinstance(x, list) else [])
-            logger.debug("'data' column processed to ensure it contains lists.")
-        else:
-            logger.warning("Warning: 'data' column not found in the DataFrame.")
-            st.warning("Warning: 'data' column not found in the DataFrame.")
-            df['data'] = [[] for _ in range(len(df))]  # Assign a list of empty lists
-
-        # Identify columns with complex data types (lists, dicts, sets), excluding 'data'
-        complex_cols = [col for col in df.columns if col != 'data' and df[col].apply(lambda x: isinstance(x, (list, dict, set))).any()]
-        if complex_cols:
-            logger.info(f"Columns with complex data types (to be dropped): {complex_cols}")
-            df = df.drop(columns=complex_cols)
-            logger.debug("Dropped columns with complex data types.")
-        else:
-            logger.debug("No columns with complex data types found.")
-
-        # Remove duplicate rows, excluding 'data' column to avoid unhashable types
-        if 'data' in df.columns:
-            df = df.drop_duplicates(subset=[col for col in df.columns if col != 'data'])
-        else:
-            df = df.drop_duplicates()
-        logger.debug("Dropped duplicate rows.")
-
-        logger.info("Cleaned data successfully.")
+        # Handle missing values for key indicators
+        numeric_cols = [
+            'new_cases', 'new_deaths', 'total_cases', 'total_deaths',
+            'new_cases_per_million', 'new_deaths_per_million',
+            'reproduction_rate', 'icu_patients', 'hosp_patients'
+        ]
+        for col in numeric_cols:
+            if col in df.columns:
+                missing = df[col].isna().sum()
+                if missing > 0:
+                    df[col] = df[col].fillna(0)  # Fill missing values with 0
+                    logger.warning(f"Filled {missing} missing values in '{col}' with 0.")
+        logger.info("Cleaned health data successfully.")
         return df
     except Exception as e:
-        logger.error(f"Error cleaning data: {e}")
-        st.error(f"Error cleaning data: {e}")
+        logger.error(f"Error cleaning health data: {e}")
+        st.error(f"Error cleaning health data: {e}")
         return pd.DataFrame()
 
-
 def transform_health_data(df):
-    """Transform health data by exploding and normalizing the 'data' column."""
+    """Transform health data by aggregating key indicators annually."""
     try:
         logger.info("Starting transformation of health data.")
-        logger.debug(f"Initial health data columns: {df.columns.tolist()}")
 
-        if 'data' not in df.columns:
-            logger.error("Error: 'data' column not found in health data.")
-            st.error("Error: 'data' column not found in health data.")
-            return pd.DataFrame()
+        # Ensure 'date' column is datetime
+        if not pd.api.types.is_datetime64_any_dtype(df['date']):
+            df['date'] = pd.to_datetime(df['date'], errors='coerce')
+            logger.debug("Converted 'date' to datetime.")
 
-        # Explode the 'data' column to have one row per record
-        df_exploded = df.explode('data').reset_index(drop=True)
-        logger.debug(f"After exploding 'data' column: {df_exploded.shape}")
+        # Extract Year
+        df['Year'] = df['date'].dt.year
 
-        # Normalize the nested 'data' dictionaries
-        data_expanded = pd.json_normalize(df_exploded['data'])
-        logger.debug(f"Normalized 'data' column: {data_expanded.shape}")
+        # Select relevant columns
+        relevant_cols = [
+            'iso_code', 'location', 'continent', 'date', 'Year',
+            'new_cases', 'new_deaths', 'total_cases', 'total_deaths',
+            'new_cases_per_million', 'new_deaths_per_million',
+            'reproduction_rate', 'icu_patients', 'hosp_patients'
+        ]
+        df = df[relevant_cols]
+        logger.debug(f"Selected relevant columns: {relevant_cols}")
 
-        # Concatenate the main dataframe with the expanded data
-        df_combined = pd.concat([df_exploded.drop(columns=['data']), data_expanded], axis=1)
-        logger.debug(f"Combined dataframe shape: {df_combined.shape}")
-
-        # Check if 'date' column exists
-        if 'date' not in df_combined.columns:
-            logger.error("Error: 'date' column not found after normalization.")
-            st.error("Error: 'date' column not found after normalization.")
-            return pd.DataFrame()
-
-        # Convert 'date' to datetime and extract 'Year'
-        df_combined['date'] = pd.to_datetime(df_combined['date'], errors='coerce')
-        df_combined['Year'] = df_combined['date'].dt.year
-        logger.debug("Converted 'date' to datetime and extracted 'Year'.")
-
-        # Identify numeric columns for aggregation, excluding 'Year'
-        numeric_cols = [col for col in df_combined.select_dtypes(include=['number']).columns if col != 'Year']
-        logger.info(f"Numeric columns for aggregation: {numeric_cols}")
-
-        # Group by 'country_code' and 'Year' and calculate mean of numeric columns
-        df_transformed = df_combined.groupby(['country_code', 'Year'])[numeric_cols].mean().reset_index()
+        # Group by 'iso_code' and 'Year' and calculate mean of numeric columns
+        numeric_cols = [
+            'new_cases', 'new_deaths', 'total_cases', 'total_deaths',
+            'new_cases_per_million', 'new_deaths_per_million',
+            'reproduction_rate', 'icu_patients', 'hosp_patients'
+        ]
+        df_transformed = df.groupby(['iso_code', 'location', 'continent', 'Year'])[numeric_cols].mean().reset_index()
         logger.debug(f"Transformed health data sample:\n{df_transformed.head()}")
 
         logger.info("Transformed health data successfully.")
@@ -100,48 +77,36 @@ def transform_health_data(df):
         st.error(f"Error transforming health data: {e}")
         return pd.DataFrame()
 
-
 def transform_economic_data(df):
-    """Transform economic data by extracting year and grouping by series_id and year."""
+    """Transform economic data from World Bank API."""
     try:
         logger.info("Starting transformation of economic data.")
-        logger.debug(f"Initial economic data columns: {df.columns.tolist()}")
-
-        if 'Year' in df.columns:
-            logger.debug("'Year' column already exists. Skipping creation.")
-        elif 'date' in df.columns:
-            df['date'] = pd.to_datetime(df['date'], errors='coerce')
-            df['Year'] = df['date'].dt.year
-            logger.debug("Converted 'date' to datetime and extracted 'Year'.")
-        else:
-            logger.error("Error: 'date' column not found in economic data.")
-            st.error("Error: 'date' column not found in economic data.")
-            return pd.DataFrame()
-
-        # Ensure 'value' column is numeric
-        if 'value' in df.columns:
-            df['value'] = pd.to_numeric(df['value'], errors='coerce')
-            logger.debug("Ensured 'value' column is numeric.")
-        else:
-            logger.error("Error: 'value' column not found in economic data.")
-            st.error("Error: 'value' column not found in economic data.")
-            return pd.DataFrame()
-
-        # Identify numeric columns for aggregation, excluding 'Year'
-        numeric_cols = [col for col in df.select_dtypes(include=['number']).columns if col != 'Year']
-        logger.info(f"Numeric columns for aggregation: {numeric_cols}")
-
-        # Group by 'series_id' and 'Year' and calculate mean of numeric columns
-        df_transformed = df.groupby(['series_id', 'Year'])[numeric_cols].mean().reset_index()
-        logger.debug(f"Transformed economic data sample:\n{df_transformed.head()}")
-
+        
+        # Rename columns for clarity
+        df = df.rename(columns={
+            'countryiso3code': 'iso_code',
+            'date': 'Year',
+            'value': 'value'
+        })
+        
+        # Convert 'Year' to numeric
+        df['Year'] = pd.to_numeric(df['Year'], errors='coerce')
+        
+        # Convert 'value' to numeric
+        df['value'] = pd.to_numeric(df['value'], errors='coerce')
+        
+        # Drop rows with missing 'Year' or 'value'
+        df = df.dropna(subset=['Year', 'value'])
+        
+        # Select relevant columns
+        df = df[['iso_code', 'Year', 'value']]
+        
         logger.info("Transformed economic data successfully.")
-        return df_transformed
+        return df
     except Exception as e:
         logger.error(f"Error transforming economic data: {e}")
         st.error(f"Error transforming economic data: {e}")
         return pd.DataFrame()
-
 
 def normalize_data(df, columns):
     """Normalize specified columns in the DataFrame."""
@@ -173,13 +138,18 @@ def normalize_data(df, columns):
         st.error(f"Error normalizing data: {e}")
         return pd.DataFrame()
 
-
 def calculate_correlation(health_df, economic_df, health_col, econ_col):
     """Calculate the correlation between a health indicator and an economic indicator."""
     try:
         logger.info(f"Calculating correlation between '{health_col}' and '{econ_col}'.")
-        # Merge on 'Year'
-        merged = pd.merge(health_df, economic_df, on='Year', how='inner', suffixes=('_health', '_econ'))
+        # Merge on 'Year' and 'iso_code'
+        merged = pd.merge(
+            health_df,
+            economic_df,
+            on=['iso_code', 'Year'],
+            how='inner',
+            suffixes=('_health', '_econ')
+        )
         logger.debug(f"Merged data for correlation calculation:\n{merged.head()}")
 
         if merged.shape[0] < 2:
@@ -193,7 +163,7 @@ def calculate_correlation(health_df, economic_df, health_col, econ_col):
             return None
 
         # Calculate correlation
-        correlation = merged[[health_col, econ_col]].corr().iloc[0, 1]
+        correlation = merged[health_col].corr(merged[econ_col])
         logger.info(f"Calculated correlation: {correlation}")
         return correlation
     except Exception as e:
@@ -201,10 +171,9 @@ def calculate_correlation(health_df, economic_df, health_col, econ_col):
         st.error(f"Error calculating correlation: {e}")
         return None
 
-
 # Configure Logging
 logging.basicConfig(
-    level=logging.DEBUG,  # Change to INFO or WARNING to reduce verbosity
+    level=logging.INFO,  # Change to DEBUG for more verbosity
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler()
@@ -255,8 +224,8 @@ if __name__ == "__main__":
         'realtime_end': ['2020-01-02', '2021-01-02']
     })
 
-    logger.info("\nTesting clean_data...")
-    cleaned_health = clean_data(health_mock)
+    logger.info("\nTesting clean_data_health...")
+    cleaned_health = clean_data_health(health_mock)
     logger.info(cleaned_health)
 
     logger.info("\nTesting transform_health_data...")

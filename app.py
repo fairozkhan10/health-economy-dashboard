@@ -3,10 +3,16 @@
 # Description: Interactive dashboard for health and economic data analysis
 
 import streamlit as st
-import pandas as pd  # Import pandas as pd
-import logging  # Import logging
+import pandas as pd
+import logging
 from data_fetcher import fetch_health_data, fetch_economic_data
-from data_processing import clean_data, transform_health_data, transform_economic_data, normalize_data, calculate_correlation
+from data_processing import (
+    clean_data_health,
+    transform_health_data,
+    transform_economic_data,
+    normalize_data,
+    calculate_correlation
+)
 from visualization import plot_comparison_with_annotations, plot_cross_country_heatmap
 
 # Configure Logging
@@ -27,22 +33,34 @@ st.title("🌐 Health and Economy Dashboard")
 # Sidebar for user inputs
 st.sidebar.header("User Inputs")
 
+# Fetch available country codes from OWID data
+@st.cache_data
+def get_available_countries():
+    health_data_raw = fetch_health_data()
+    if health_data_raw is not None:
+        countries = sorted(health_data_raw['iso_code'].dropna().unique())
+        return countries
+    else:
+        return []
+
+available_countries = get_available_countries()
+
 # User Input for Country Codes (Multiple Selection)
 country_codes = st.sidebar.multiselect(
-    "Select Country Codes (e.g., USA, IND, BRA):", 
-    options=["USA", "IND", "BRA", "CAN", "GBR", "FRA", "DEU", "JPN", "CHN", "RUS"],
-    default=["USA"]
+    "Select Country Codes:",
+    options=available_countries,
+    default=["USA", "IND", "BRA"]
 )
 
 # User Input for Health Indicator
 health_indicator = st.sidebar.selectbox(
     "Select Health Indicator:",
     options=[
-        "new_cases", 
-        "new_deaths", 
-        "total_cases", 
-        "total_deaths", 
-        "new_cases_per_million", 
+        "new_cases",
+        "new_deaths",
+        "total_cases",
+        "total_deaths",
+        "new_cases_per_million",
         "new_deaths_per_million",
         "reproduction_rate",
         "icu_patients",
@@ -51,11 +69,31 @@ health_indicator = st.sidebar.selectbox(
 )
 
 # User Input for Economic Indicator
-economic_indicator = st.sidebar.selectbox(
+economic_indicators = {
+    "GDP (Current US$)": "NY.GDP.MKTP.CD",
+    "GDP per Capita (Current US$)": "NY.GDP.PCAP.CD",
+    "GDP Growth (Annual %)": "NY.GDP.MKTP.KD.ZG",
+    "Inflation, Consumer Prices (Annual %)": "FP.CPI.TOTL.ZG",
+    "Unemployment Rate (%)": "SL.UEM.TOTL.ZS",
+    "Health Expenditure per Capita (Current US$)": "SH.XPD.CHEX.PC.CD",
+    "Health Expenditure (% of GDP)": "SH.XPD.CHEX.GD.ZS",
+    "Poverty Headcount Ratio (% of Population)": "SI.POV.DDAY",
+    "Gini Index": "SI.POV.GINI",
+    "Life Expectancy at Birth (Years)": "SP.DYN.LE00.IN",
+    "CO₂ Emissions (Metric Tons per Capita)": "EN.ATM.CO2E.PC",
+    "Access to Electricity (% of Population)": "EG.ELC.ACCS.ZS",
+    "Population Growth (Annual %)": "SP.POP.GROW",
+    "Urban Population (% of Total Population)": "SP.URB.TOTL.IN.ZS",
+    "Labor Force Participation Rate (%)": "SL.TLF.CACT.ZS",
+    "Government Expenditure on Education (% of GDP)": "SE.XPD.TOTL.GD.ZS",
+}
+
+economic_indicator_name = st.sidebar.selectbox(
     "Select Economic Indicator:",
-    options=["CPIAUCSL", "GDP", "UNRATE", "DGS10", "FEDFUNDS"],
+    options=list(economic_indicators.keys()),
     index=0
 )
+economic_indicator_code = economic_indicators[economic_indicator_name]
 
 # User input for the type of chart
 chart_type = st.sidebar.selectbox(
@@ -63,71 +101,70 @@ chart_type = st.sidebar.selectbox(
     options=["Comparison Chart", "Heatmap"]
 )
 
-# User input for rolling average window size
-rolling_window = st.sidebar.slider("Select Rolling Average Window (in days):", min_value=1, max_value=30, value=7)
-
 # User input for Year Range
 with st.sidebar.expander("Select Year Range"):
     year_min = 2000
     year_max = 2023
     year_range = st.slider(
-        "Year Range:", 
-        min_value=year_min, 
-        max_value=year_max, 
+        "Year Range:",
+        min_value=year_min,
+        max_value=year_max,
         value=(2020, 2023)
     )
 
 # Caching the data fetching and processing functions
 @st.cache_data
-def get_health_data(health_indicator):
+def get_health_data():
     health_data_raw = fetch_health_data()
     if health_data_raw is not None:
-        cleaned_health = clean_data(health_data_raw)
+        cleaned_health = clean_data_health(health_data_raw)
         if not cleaned_health.empty:
             health_data_transformed = transform_health_data(cleaned_health)
             if not health_data_transformed.empty:
-                return normalize_data(health_data_transformed, [health_indicator])
+                return health_data_transformed
     return None
 
 @st.cache_data
-def get_economic_data(economic_indicator):
-    economic_data_raw = fetch_economic_data(series_ids=[economic_indicator])
+def get_economic_data(country_codes, economic_indicator_code):
+    economic_data_raw = fetch_economic_data(country_codes=country_codes, indicator_id=economic_indicator_code)
     if economic_data_raw is not None:
-        cleaned_economic = clean_data(economic_data_raw)
-        if not cleaned_economic.empty:
-            economic_data_transformed = transform_economic_data(cleaned_economic)
-            if not economic_data_transformed.empty:
-                return normalize_data(economic_data_transformed, ['value'])
+        economic_data_transformed = transform_economic_data(economic_data_raw)
+        if not economic_data_transformed.empty:
+            return economic_data_transformed
     return None
 
 # Fetch and Process Health Data
 with st.spinner("Fetching and processing health data..."):
-    health_data_normalized = get_health_data(health_indicator=health_indicator)
-    if health_data_normalized is None:
+    health_data = get_health_data()
+    if health_data is None:
         st.error("Failed to process health data.")
 
 # Fetch and Process Economic Data
 with st.spinner("Fetching and processing economic data..."):
-    economic_data_normalized = get_economic_data(economic_indicator=economic_indicator)
-    if economic_data_normalized is None:
+    economic_data = get_economic_data(country_codes=country_codes, economic_indicator_code=economic_indicator_code)
+    if economic_data is None:
         st.error("Failed to process economic data.")
 
-# Filter Data by Year Range
-if health_data_normalized is not None:
-    health_filtered = health_data_normalized[
-        (health_data_normalized['Year'] >= year_range[0]) &
-        (health_data_normalized['Year'] <= year_range[1])
+# Filter Data by Year Range and Country Codes
+if health_data is not None:
+    health_filtered = health_data[
+        (health_data['Year'] >= year_range[0]) &
+        (health_data['Year'] <= year_range[1]) &
+        (health_data['iso_code'].isin(country_codes))
     ]
-    logger.debug(f"Health data filtered for years {year_range[0]} to {year_range[1]}.")
+    health_filtered = normalize_data(health_filtered, [health_indicator])
+    logger.debug(f"Health data filtered for years {year_range[0]} to {year_range[1]} and countries {country_codes}.")
 else:
     health_filtered = None
 
-if economic_data_normalized is not None:
-    economic_filtered = economic_data_normalized[
-        (economic_data_normalized['Year'] >= year_range[0]) &
-        (economic_data_normalized['Year'] <= year_range[1])
+if economic_data is not None:
+    economic_filtered = economic_data[
+        (economic_data['Year'] >= year_range[0]) &
+        (economic_data['Year'] <= year_range[1]) &
+        (economic_data['iso_code'].isin(country_codes))
     ]
-    logger.debug(f"Economic data filtered for years {year_range[0]} to {year_range[1]}.")
+    economic_filtered = normalize_data(economic_filtered, ['value'])
+    logger.debug(f"Economic data filtered for years {year_range[0]} to {year_range[1]} and countries {country_codes}.")
 else:
     economic_filtered = None
 
@@ -142,7 +179,7 @@ with col1:
                 health_df=health_filtered,
                 economic_df=economic_filtered,
                 health_indicator=health_indicator,
-                economic_indicator=economic_indicator,
+                economic_indicator_name=economic_indicator_name,
                 country_codes=country_codes
             )
 
@@ -155,7 +192,7 @@ with col1:
             )
             if correlation is not None and not pd.isna(correlation):
                 st.subheader("🔗 Correlation Analysis")
-                st.write(f"The correlation between **{health_indicator}** and **{economic_indicator}** is **{correlation:.2f}**.")
+                st.write(f"The correlation between **{health_indicator}** and **{economic_indicator_name}** is **{correlation:.2f}**.")
             else:
                 st.subheader("🔗 Correlation Analysis")
                 st.write("Insufficient data or variability to calculate correlation.")
@@ -163,9 +200,9 @@ with col1:
             st.warning("Insufficient data to generate comparison chart.")
 
     elif chart_type == "Heatmap":
-        if health_data_normalized is not None:
+        if health_filtered is not None:
             plot_cross_country_heatmap(
-                health_df=health_data_normalized,
+                health_df=health_filtered,
                 health_indicator=health_indicator
             )
         else:
@@ -173,25 +210,23 @@ with col1:
 
 with col2:
     st.header("📈 Additional Insights")
-    if health_data_normalized is not None and economic_data_normalized is not None:
+    if health_filtered is not None and economic_filtered is not None:
         # Display Health Data
         st.subheader("🔍 Health Data Sample")
-        st.dataframe(health_data_normalized.head())
+        st.dataframe(health_filtered.head())
 
         # Display Economic Data
         st.subheader("🔍 Economic Data Sample")
-        st.dataframe(economic_data_normalized.head())
+        st.dataframe(economic_filtered.head())
 
         # Download Options
         st.subheader("💾 Download Data")
         with st.expander("Download Health Data"):
-            csv_health = health_data_normalized.to_csv(index=False)
+            csv_health = health_filtered.to_csv(index=False)
             st.download_button(label="Download Health Data as CSV", data=csv_health, file_name='health_data.csv', mime='text/csv')
 
         with st.expander("Download Economic Data"):
-            csv_economic = economic_data_normalized.to_csv(index=False)
+            csv_economic = economic_filtered.to_csv(index=False)
             st.download_button(label="Download Economic Data as CSV", data=csv_economic, file_name='economic_data.csv', mime='text/csv')
     else:
         st.write("Data is insufficient to display additional insights.")
-
-# Footer or additional layout elements can be added below as needed

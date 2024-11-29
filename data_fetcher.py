@@ -2,75 +2,50 @@
 # Author: Fairoz Khan
 # Description: Module for fetching real-time health and economic data from APIs
 
-import os
 import requests
 import pandas as pd
 import logging
-import streamlit as st  # Import Streamlit to access secrets
-
+import streamlit as st
 
 def fetch_health_data():
-    """Fetch COVID-19 health data for multiple countries from Our World in Data."""
-    url = "https://covid.ourworldindata.org/data/owid-covid-data.json"
+    """Fetch COVID-19 health data from Our World in Data CSV dataset."""
+    url = "https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv"
     try:
-        response = requests.get(url, timeout=20)
-        response.raise_for_status()  # Raise HTTPError for bad responses
-        data = response.json()
-        df = pd.DataFrame.from_dict(data, orient='index').reset_index()
-        df.rename(columns={"index": "country_code"}, inplace=True)
-        logger.info("Successfully fetched health data.")
+        logger.info("Attempting to fetch health data using pandas.")
+        df = pd.read_csv(url, parse_dates=['date'])
+        logger.info("Successfully fetched and parsed health data.")
         return df
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         logger.error(f"Error fetching health data: {e}")
         st.error(f"Error fetching health data: {e}")
         return None
 
-
-def fetch_economic_data(series_ids=["CPIAUCSL"]):
-    """Fetch multiple economic data series from FRED."""
-    url = "https://api.stlouisfed.org/fred/series/observations"
-
-    # Fetch API key from Streamlit secrets first, fallback to environment variable
-    api_key = st.secrets["FRED_API_KEY"] if "FRED_API_KEY" in st.secrets else os.getenv("FRED_API_KEY")
-
-    if not api_key:
-        logger.error("FRED_API_KEY not set in Streamlit secrets or environment variables.")
-        st.error("Error: FRED_API_KEY not set in Streamlit secrets or environment variables.")
-        return None
-
-    all_series_data = []
-    for series_id in series_ids:
+def fetch_economic_data(country_codes, indicator_id):
+    """Fetch economic data for multiple countries from the World Bank API."""
+    try:
+        logger.info(f"Fetching economic data for indicator '{indicator_id}' from World Bank API.")
+        url = f"https://api.worldbank.org/v2/country/{';'.join(country_codes)}/indicator/{indicator_id}"
         params = {
-            "series_id": series_id,
-            "api_key": api_key,
-            "file_type": "json"
+            "format": "json",
+            "per_page": "20000"  # Increase if needed
         }
-        try:
-            response = requests.get(url, params=params, timeout=20)
-            response.raise_for_status()
-            data = response.json()
-            observations = data.get("observations", [])
-            if observations:
-                df = pd.json_normalize(observations)
-                df["series_id"] = series_id
-                all_series_data.append(df)
-                logger.info(f"Successfully fetched economic data for series_id {series_id}.")
-            else:
-                logger.warning(f"No observations found for series_id {series_id}.")
-                st.warning(f"No observations found for series_id {series_id}.")
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching economic data for series_id {series_id}: {e}")
-            st.error(f"Error fetching economic data for series_id {series_id}: {e}")
-
-    if all_series_data:
-        combined_df = pd.concat(all_series_data, ignore_index=True)
-        logger.info("Successfully combined all economic data.")
-        return combined_df
-    else:
-        logger.error("No economic data fetched.")
-        st.error("No economic data fetched.")
+        response = requests.get(url, params=params, timeout=60)
+        response.raise_for_status()
+        data = response.json()
+        
+        if len(data) == 2 and data[1]:
+            records = data[1]
+            df = pd.DataFrame.from_records(records)
+            logger.info("Successfully fetched economic data.")
+            return df
+        else:
+            logger.warning(f"No economic data found for indicator '{indicator_id}'.")
+            st.warning(f"No economic data found for indicator '{indicator_id}'.")
+            return None
+    except Exception as e:
+        logger.error(f"Error fetching economic data: {e}")
+        st.error(f"Error fetching economic data: {e}")
         return None
-
 
 # Configure Logging
 logging.basicConfig(
@@ -95,7 +70,9 @@ if __name__ == "__main__":
 
     # Testing Economic Data Fetching
     logger.info("\nTesting Economic Data Fetching...")
-    economic_data = fetch_economic_data(series_ids=["CPIAUCSL", "GDP"])
+    country_codes = ['USA', 'IND', 'BRA', 'CAN', 'GBR', 'FRA', 'DEU', 'JPN', 'CHN', 'RUS']
+    indicator_id = "NY.GDP.MKTP.CD"  # GDP (Current US$)
+    economic_data = fetch_economic_data(country_codes=country_codes, indicator_id=indicator_id)
     if economic_data is not None:
         logger.info("Economic Data Retrieved:")
         logger.info(economic_data.head())

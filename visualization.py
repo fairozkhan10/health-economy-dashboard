@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import logging
 
-def plot_comparison_with_annotations(health_df, economic_df, health_indicator, economic_indicator, country_codes):
+def plot_comparison_with_annotations(health_df, economic_df, health_indicator, economic_indicator_name, country_codes):
     """Plot comparison with annotations for key events for multiple countries."""
     try:
         logger.info("Generating comparison chart with annotations.")
@@ -19,16 +19,16 @@ def plot_comparison_with_annotations(health_df, economic_df, health_indicator, e
 
         for country in country_codes:
             # Filter health data for the specified country
-            health_country_df = health_df[health_df['country_code'] == country]
-            economic_country_df = economic_df[economic_df['series_id'] == economic_indicator]
+            health_country_df = health_df[health_df['iso_code'] == country]
+            economic_country_df = economic_df[economic_df['iso_code'] == country]
 
             if health_country_df.empty:
                 logger.warning(f"No health data found for country code '{country}'. Skipping.")
                 st.warning(f"No health data found for country code '{country}'. Skipping.")
                 continue
             if economic_country_df.empty:
-                logger.warning(f"No economic data found for series_id '{economic_indicator}' for country '{country}'. Skipping.")
-                st.warning(f"No economic data found for series_id '{economic_indicator}' for country '{country}'. Skipping.")
+                logger.warning(f"No economic data found for country code '{country}'. Skipping.")
+                st.warning(f"No economic data found for country code '{country}'. Skipping.")
                 continue
 
             # Add health data trace
@@ -43,7 +43,7 @@ def plot_comparison_with_annotations(health_df, economic_df, health_indicator, e
             fig.add_trace(go.Scatter(
                 x=economic_country_df['Year'],
                 y=economic_country_df['value'],
-                name=f"{economic_indicator} ({country})",
+                name=f"{economic_indicator_name} ({country})",
                 line=dict(color=color_map[country], dash='dash'),
                 yaxis="y2"
             ))
@@ -55,7 +55,7 @@ def plot_comparison_with_annotations(health_df, economic_df, health_indicator, e
                 fig.add_annotation(
                     x=max_health_year,
                     y=max_health,
-                    text=f"Peak Health ({country}): {max_health:.2f}",
+                    text=f"Peak {health_indicator} ({country}): {max_health:.2f}",
                     showarrow=True,
                     arrowhead=2,
                     ax=0,
@@ -69,7 +69,7 @@ def plot_comparison_with_annotations(health_df, economic_df, health_indicator, e
                 fig.add_annotation(
                     x=max_econ_year,
                     y=max_econ,
-                    text=f"Peak Economic ({country}): {max_econ:.2f}",
+                    text=f"Peak {economic_indicator_name} ({country}): {max_econ:.2f}",
                     showarrow=True,
                     arrowhead=2,
                     ax=0,
@@ -79,7 +79,7 @@ def plot_comparison_with_annotations(health_df, economic_df, health_indicator, e
 
         # Update layout for dual y-axes
         fig.update_layout(
-            title=f"Comparison of {health_indicator} and {economic_indicator}",
+            title=f"Comparison of {health_indicator} and {economic_indicator_name}",
             xaxis=dict(title="Year"),
             yaxis=dict(
                 title=f"{health_indicator} (Health)",
@@ -87,7 +87,7 @@ def plot_comparison_with_annotations(health_df, economic_df, health_indicator, e
                 tickfont=dict(color="blue")
             ),
             yaxis2=dict(
-                title=f"{economic_indicator} (Economic)",
+                title=f"{economic_indicator_name} (Economic)",
                 titlefont=dict(color="green"),
                 tickfont=dict(color="green"),
                 overlaying="y",
@@ -104,7 +104,6 @@ def plot_comparison_with_annotations(health_df, economic_df, health_indicator, e
         logger.error(f"Error generating comparison chart: {e}")
         st.error(f"Error generating comparison chart: {e}")
 
-
 def plot_cross_country_heatmap(health_df, health_indicator):
     """Plot heatmap to compare health indicators across countries."""
     try:
@@ -115,7 +114,7 @@ def plot_cross_country_heatmap(health_df, health_indicator):
             return
 
         # Pivot the DataFrame to have countries on one axis and years on the other
-        pivot_df = health_df.pivot(index='country_code', columns='Year', values=health_indicator)
+        pivot_df = health_df.pivot(index='iso_code', columns='Year', values=health_indicator)
 
         fig = px.imshow(
             pivot_df,
@@ -132,7 +131,6 @@ def plot_cross_country_heatmap(health_df, health_indicator):
     except Exception as e:
         logger.error(f"Error generating heatmap: {e}")
         st.error(f"Error generating heatmap: {e}")
-
 
 # Configure Logging
 logging.basicConfig(
