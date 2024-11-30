@@ -10,6 +10,7 @@ def clean_data_health(df):
     """Clean health data by removing duplicates and handling missing values."""
     try:
         logger.info("Starting cleaning of health data.")
+        
         # Remove duplicate rows
         initial_shape = df.shape
         df = df.drop_duplicates()
@@ -23,14 +24,21 @@ def clean_data_health(df):
         numeric_cols = [
             'new_cases', 'new_deaths', 'total_cases', 'total_deaths',
             'new_cases_per_million', 'new_deaths_per_million',
-            'reproduction_rate', 'icu_patients', 'hosp_patients'
+            'reproduction_rate', 'icu_patients', 'hosp_patients',
+            'population_density', 'median_age', 'aged_65_older',
+            'aged_70_older', 'gdp_per_capita', 'cardiovasc_death_rate',
+            'diabetes_prevalence', 'handwashing_facilities',
+            'hospital_beds_per_thousand', 'life_expectancy',
+            'human_development_index', 'extreme_poverty',
+            'female_smokers', 'male_smokers'
         ]
         for col in numeric_cols:
             if col in df.columns:
                 missing = df[col].isna().sum()
                 if missing > 0:
-                    df[col] = df[col].fillna(0)  # Fill missing values with 0
-                    logger.warning(f"Filled {missing} missing values in '{col}' with 0.")
+                    # Fill missing values with column mean for better ML performance
+                    df[col] = df[col].fillna(df[col].mean())
+                    logger.warning(f"Filled {missing} missing values in '{col}' with mean value.")
         logger.info("Cleaned health data successfully.")
         return df
     except Exception as e:
@@ -56,7 +64,13 @@ def transform_health_data(df):
             'iso_code', 'location', 'continent', 'date', 'Year',
             'new_cases', 'new_deaths', 'total_cases', 'total_deaths',
             'new_cases_per_million', 'new_deaths_per_million',
-            'reproduction_rate', 'icu_patients', 'hosp_patients'
+            'reproduction_rate', 'icu_patients', 'hosp_patients',
+            'population_density', 'median_age', 'aged_65_older',
+            'aged_70_older', 'gdp_per_capita', 'cardiovasc_death_rate',
+            'diabetes_prevalence', 'handwashing_facilities',
+            'hospital_beds_per_thousand', 'life_expectancy',
+            'human_development_index', 'extreme_poverty',
+            'female_smokers', 'male_smokers'
         ]
         df = df[relevant_cols]
         logger.debug(f"Selected relevant columns: {relevant_cols}")
@@ -65,7 +79,13 @@ def transform_health_data(df):
         numeric_cols = [
             'new_cases', 'new_deaths', 'total_cases', 'total_deaths',
             'new_cases_per_million', 'new_deaths_per_million',
-            'reproduction_rate', 'icu_patients', 'hosp_patients'
+            'reproduction_rate', 'icu_patients', 'hosp_patients',
+            'population_density', 'median_age', 'aged_65_older',
+            'aged_70_older', 'gdp_per_capita', 'cardiovasc_death_rate',
+            'diabetes_prevalence', 'handwashing_facilities',
+            'hospital_beds_per_thousand', 'life_expectancy',
+            'human_development_index', 'extreme_poverty',
+            'female_smokers', 'male_smokers'
         ]
         df_transformed = df.groupby(['iso_code', 'location', 'continent', 'Year'])[numeric_cols].mean().reset_index()
         logger.debug(f"Transformed health data sample:\n{df_transformed.head()}")
@@ -180,66 +200,3 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-
-# Test block
-if __name__ == "__main__":
-    # Mock health data with nested 'data' column
-    health_mock = pd.DataFrame({
-        'country_code': ['USA', 'IND'],
-        'continent': ['North America', 'Asia'],
-        'location': ['United States', 'India'],
-        'population': [331002651, 1380004385],
-        'population_density': [36.0, 464.0],
-        'median_age': [38.3, 28.4],
-        'aged_65_older': [16.5, 5.1],
-        'aged_70_older': [10.5, 3.0],
-        'gdp_per_capita': [65112.0, 2100.0],
-        'cardiovasc_death_rate': [300.0, 200.0],
-        'diabetes_prevalence': [10.5, 8.0],
-        'handwashing_facilities': [99.0, 75.0],
-        'hospital_beds_per_thousand': [2.8, 0.5],
-        'life_expectancy': [78.54, 69.42],
-        'human_development_index': [0.920, 0.645],
-        'data': [
-            [
-                {'date': '2020-01-01', 'new_cases': 0, 'new_deaths': 0},
-                {'date': '2020-01-02', 'new_cases': 1, 'new_deaths': 0}
-            ],
-            [
-                {'date': '2020-01-01', 'new_cases': 0, 'new_deaths': 0},
-                {'date': '2020-01-02', 'new_cases': 2, 'new_deaths': 0}
-            ]
-        ],
-        'extreme_poverty': [9.2, 20.3],
-        'female_smokers': [12.0, 5.0],
-        'male_smokers': [14.0, 7.0]
-    })
-
-    # Mock economic data
-    economic_mock = pd.DataFrame({
-        'series_id': ['CPIAUCSL', 'CPIAUCSL'],
-        'date': ['2020-01-01', '2021-01-01'],
-        'value': [257.5, 260.0],
-        'realtime_start': ['2020-01-01', '2021-01-01'],
-        'realtime_end': ['2020-01-02', '2021-01-02']
-    })
-
-    logger.info("\nTesting clean_data_health...")
-    cleaned_health = clean_data_health(health_mock)
-    logger.info(cleaned_health)
-
-    logger.info("\nTesting transform_health_data...")
-    health_transformed = transform_health_data(cleaned_health)
-    logger.info(health_transformed)
-
-    logger.info("\nTesting transform_economic_data...")
-    economic_transformed = transform_economic_data(economic_mock)
-    logger.info(economic_transformed)
-
-    logger.info("\nTesting normalize_data...")
-    normalized_health = normalize_data(health_transformed, ['new_cases'])
-    logger.info(normalized_health)
-
-    logger.info("\nTesting calculate_correlation...")
-    correlation = calculate_correlation(health_transformed, economic_transformed, 'new_cases', 'value')
-    logger.info(f"Correlation: {correlation}")

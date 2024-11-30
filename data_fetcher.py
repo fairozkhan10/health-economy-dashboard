@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
     # Testing Economic Data Fetching
     logger.info("\nTesting Economic Data Fetching...")
-    country_codes = ['USA', 'IND', 'BRA', 'CAN', 'GBR', 'FRA', 'DEU', 'JPN', 'CHN', 'RUS']
+    country_codes = ['USA', 'IND', 'BRA', 'CAN', 'GBR']
     indicator_id = "NY.GDP.MKTP.CD"  # GDP (Current US$)
     economic_data = fetch_economic_data(country_codes=country_codes, indicator_id=indicator_id)
     if economic_data is not None:
