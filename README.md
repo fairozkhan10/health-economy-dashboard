@@ -22,11 +22,11 @@ The **Health and Economy Dashboard** is an interactive web application that inte
     cd health-economy-dashboard
     ```
 
-2. **Create a Virtual Environment:**
+2. **Set Up a Conda Environment:**
 
     ```bash
-    python3 -m venv env
-    source env/bin/activate  # On Windows: env\Scripts\activate
+    conda create -n health-econ-dashboard python=3.9
+    conda activate health-econ-dashboard
     ```
 
 3. **Install Dependencies:**
@@ -67,6 +67,20 @@ The **Health and Economy Dashboard** is an interactive web application that inte
 
 ## Project Structure
 
+health-economy-dashboard/
+├── data/
+│   ├── health_data.csv  # Example data storage
+│   ├── economic_data.csv  # Example economic data storage
+├── app.py  # Main Streamlit application
+├── requirements.txt  # Python dependencies
+├── README.md  # Project documentation
+├── machine_learning.py  # ML model implementations
+├── visualization.py  # Visualization utilities
+├── data_processing.py  # Data cleaning and transformation
+├── data_fetcher.py  # API integration for data fetching
+└── tests/  # Unit tests for core functionalities
+
+
 
 ## Future Enhancements
 
@@ -74,9 +88,10 @@ The **Health and Economy Dashboard** is an interactive web application that inte
 - **Clustering:** Group countries based on similarities in health and economic metrics using clustering algorithms.
 - **Anomaly Detection:** Identify outliers in the data to highlight unusual trends or events.
 - **Enhanced Visualizations:** Implement additional interactive charts and dashboards for deeper insights.
+- **Real-Time Updates:** Automate periodic data refresh to ensure up-to-date analysis.
+
 
 ## Contact
 
-For any queries or suggestions, feel free to contact me at [fkhan35@wisc.edu] or (saify2001@icloud.com).
-
----
+For any queries or suggestions, feel free to contact me at:
+- **Email:** [fkhan35@wisc.edu] or [saify2001@icloud.com]
